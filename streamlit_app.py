@@ -1,6 +1,4 @@
 import streamlit as st
-
-import streamlit as st
 import pandas as pd
 import wave
 import numpy as np
@@ -12,6 +10,7 @@ from pinecone import Pinecone, ServerlessSpec
 import re
 from io import BytesIO
 import os
+import atexit  # Import the atexit module
 
 # Set environment variables for Huggingface and Pinecone API keys
 os.environ["HUGGINGFACE_API_TOKEN"] = "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"
@@ -24,7 +23,7 @@ PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 # Initialize Pinecone using the new Pinecone class
 pc = Pinecone(api_key=PINECONE_API_KEY)
 
-index_name = 'audio'
+index_name = 'audio-search-index'
 
 # Check if the index exists before creating it
 if index_name not in pc.list_indexes().names():
@@ -94,8 +93,12 @@ def play_audio_and_get_text_by_id(audio_id, df):
     row = df[df['line_id'] == audio_id].iloc[0]
     audio_bytes = row['audio']['bytes']
     text = row['text']
-    audio_array, sampling_rate = extract_audio_array_from_bytes(audio_bytes)
-    return audio_array, sampling_rate, text
+    
+    if audio_bytes is not None and len(audio_bytes) > 0:
+        audio_array, sampling_rate = extract_audio_array_from_bytes(audio_bytes)
+        return audio_array, sampling_rate, text
+    else:
+        return None, None, None
 
 # Upsert unique embeddings into Pinecone
 def upsert_unique_embeddings(df):
@@ -128,55 +131,96 @@ def upsert_unique_embeddings(df):
                 'metadata': {'text': transcript}
             })
 
-    # Only upsert if we have vectors
     if vectors_to_upsert:
         index.upsert(vectors=vectors_to_upsert)
         st.write(f"Upserted {len(vectors_to_upsert)} vectors.")
     else:
         st.write("No vectors to upsert.")
 
-# Search and display similar audios
-def search_similar_audios(query_text, df, top_k=5):
+# Filter results by relevance
+def filter_results_by_relevance(results, query_text, df):
+    relevant_results = []
+    query_terms = set(query_text.lower().split())
+
+    for result in results:
+        audio_id = result['id'].replace('text_', '').replace('audio_', '')
+        audio_array, sampling_rate, audio_text = play_audio_and_get_text_by_id(audio_id, df)
+
+        if audio_array is not None and audio_text is not None:
+            audio_text_lower = audio_text.lower()
+            if any(term in audio_text_lower for term in query_terms):
+                relevant_results.append({
+                    'id': result['id'],
+                    'score': result['score'],
+                    'audio_array': audio_array,
+                    'sampling_rate': sampling_rate,
+                    'text': audio_text
+                })
+
+    return relevant_results
+
+# Search similar audios
+def search_similar_audios(query_text, df, top_k=10):
     text_embedding = create_text_embeddings(query_text)
+    
     search_results = index.query(vector=text_embedding, top_k=top_k)
 
-    if 'matches' in search_results:
+    if 'matches' in search_results and search_results['matches']:
         matches = search_results['matches']
-        for match in matches:
-            vector_id = match['id']
-            audio_id = vector_id.replace('text_', '').replace('audio_', '')
-            audio_array, sampling_rate, transcript = play_audio_and_get_text_by_id(audio_id, df)
-            
-            # Provide sample rate explicitly when playing the audio
-            st.audio(audio_array, format='audio/wav', sample_rate=sampling_rate)
-            st.write(f"Text: {transcript}")
-            st.write(f"Score: {match['score']}")
+        st.write(f"Found {len(matches)} results for your query.")
+
+        unique_results = {match['id']: match for match in matches}.values()
+        sorted_results = sorted(unique_results, key=lambda x: x['score'], reverse=True)
+
+        relevant_results = filter_results_by_relevance(sorted_results, query_text, df)
+
+        if relevant_results:
+            for match in relevant_results[:5]:
+                st.audio(match['audio_array'], format='audio/wav', sample_rate=match['sampling_rate'])
+                st.write(f"Text: {match['text']}")
+                st.write(f"Score: {match['score']}")
+        else:
+            st.write("No relevant matches found.")
+    else:
+        st.write("No results found for your query.")
+
+# Register function to delete the index on exit
+def delete_index_on_exit():
+    if index_name in pc.list_indexes().names():
+        st.write(f"Deleting Pinecone index '{index_name}' on exit...")
+        pc.delete_index(index_name)
+
+# Register the function with atexit
+atexit.register(delete_index_on_exit)
 
 # Streamlit UI
 st.title("Audio Search Engine")
 
-# Step 1: File input (path provided)
-parquet_file_path = st.text_input("Enter the path to the Parquet file containing audio data:")
+# Step 1: Text input to enter the file path
+parquet_file_path = st.text_input("Enter the full path to the Parquet file containing audio data:")
 
 if parquet_file_path:
     try:
-        # Load the dataset
-        df = pd.read_parquet(parquet_file_path)
-        st.write("Dataset loaded successfully.")
+        parquet_file_path = parquet_file_path.replace("\\", "/")
+        
+        if not os.path.exists(parquet_file_path):
+            st.error(f"File not found at {parquet_file_path}. Please check the path and try again.")
+        else:
+            df = pd.read_parquet(parquet_file_path)
+            st.write("Dataset loaded successfully.")
 
-        # Step 2: Upsert embeddings to Pinecone
-        if st.button("Create and Store Embeddings"):
-            st.write("Processing embeddings and upserting to Pinecone...")
-            upsert_unique_embeddings(df)
-            st.write("Embeddings stored in Pinecone successfully.")
+            # Step 2: Upsert embeddings to Pinecone
+            if st.button("Create and Store Embeddings"):
+                st.write("Processing embeddings and upserting to Pinecone...")
+                upsert_unique_embeddings(df)
+                st.write("Embeddings stored in Pinecone successfully.")
 
-        # Step 3: Query input
-        query_text = st.text_input("Enter a query to search for similar audio:")
+            # Step 3: Query input
+            query_text = st.text_input("Enter a query to search for similar audio:")
 
-        if query_text:
-            st.write(f"Searching for: {query_text}")
-            search_similar_audios(query_text, df)
+            if query_text:
+                st.write(f"Searching for: {query_text}")
+                search_similar_audios(query_text, df)
 
     except Exception as e:
         st.error(f"Error loading file: {e}")
-
