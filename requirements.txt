@@ -1,1 +1,6 @@
 streamlit
+pandas
+torch
+transformers
+pinecone-client
+nltk
