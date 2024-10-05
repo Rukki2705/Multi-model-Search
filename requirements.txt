@@ -10,3 +10,4 @@ PyPDF2
 sentence_transformers
 clip
 opencv-python
+opencv-python-headless
