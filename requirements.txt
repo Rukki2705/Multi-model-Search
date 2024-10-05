@@ -4,7 +4,7 @@ torch
 transformers
 pinecone-client
 nltk
-movieepy
+moviepy
 wave
 PyPDF2
 sentence_transformers
