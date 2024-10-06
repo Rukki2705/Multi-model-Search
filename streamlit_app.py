@@ -631,7 +631,13 @@ def get_pinecone_client():
             return None
     return st.session_state.pc
 
+if st.session_state.page == "video":
+    st.title("✍️ Video Search with CLIP and Pinecone")
 
+    # Add a "Home" button
+    if st.button("🏠 Home"):
+        switch_page("home")
+        st.stop()
 
     pinecone_options = ["API Key", "Environment", "Index Name"]
     selected_pinecone_option = st.sidebar.selectbox("Pinecone Settings", pinecone_options)
