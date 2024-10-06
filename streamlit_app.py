@@ -20,7 +20,6 @@ from PIL import Image
 from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 import cv2
 import tempfile
-import time
 from datetime import datetime, timedelta
 
 # Custom CSS to style the app
@@ -47,6 +46,12 @@ st.markdown("""
         justify-content: center;
     }
     
+    /* Center the main heading text */
+    .centered-text {
+        text-align: center;
+        font-size: 24px;
+        font-weight: bold;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -62,17 +67,11 @@ def switch_page(page_name):
     st.session_state.page = page_name
 
 # Home Page
-st.markdown("""
-    <style>
-    .centered-text {
-        text-align: center;
-        font-size: 24px;
-        font-weight: bold;
-    }
-    </style>
-    <div class="centered-text">Choose the type of search you'd like to perform:</div>
-""", unsafe_allow_html=True)
+if st.session_state.page == "home":
+    # Center-align the instruction text
+    st.markdown('<div class="centered-text">Choose the type of search you\'d like to perform:</div>', unsafe_allow_html=True)
 
+    # Creating columns for buttons
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
@@ -87,6 +86,7 @@ st.markdown("""
     with col4:
         if st.button("🎵 Audio Search"):
             switch_page("audio")
+
 
 # ------------------- Image Search Functionality -------------------
 if st.session_state.page == "image":
