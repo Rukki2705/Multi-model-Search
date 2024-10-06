@@ -452,7 +452,7 @@ if st.session_state.page == "audio":
                 st.error(f"Error creating index: {str(e)}")
 
     # Create index button
-    if st.button("🛠️ Create Index"):
+    if st.button("🛠️ Create A Vector Index"):
         create_index()
 
     # Ensure the index object is stored in session state after creation
