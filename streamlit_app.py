@@ -660,7 +660,7 @@ if st.session_state.page == "video":
     # Step 2: Interactive step to create Pinecone index
     index_name = "video-search-index"
     
-    if st.button("🛠️ Create Index"):
+    if st.button("🛠️ Create a Vector Index"):
         if 'index_created' not in st.session_state or not st.session_state.index_created:
             try:
                 existing_indexes = pc.list_indexes()
