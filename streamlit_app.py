@@ -38,6 +38,8 @@ st.markdown("""
         margin: 10px;
         cursor: pointer;
         border-radius: 12px;
+        width: 150px; /* Fixed width for all buttons */
+        height: 60px; /* Fixed height for all buttons */
     }
 
     /* Center the buttons */
@@ -45,7 +47,7 @@ st.markdown("""
         display: flex;
         justify-content: center;
     }
-    
+
     /* Center the main heading text */
     .centered-text {
         text-align: center;
