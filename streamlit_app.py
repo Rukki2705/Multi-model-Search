@@ -391,12 +391,7 @@ if st.session_state.page == "text":
 #----------------------------Audio Search--------------------------
 
 if st.session_state.page == "audio":
-    st.title("✍️ Audio Search with CLAP and Pinecone")
-
-    # Add a "Home" button
-    if st.button("🏠 Home"):
-        switch_page("home")
-        st.stop()
+    
 
     nltk.download('stopwords')
     stop_words = set(stopwords.words('english'))
