@@ -38,8 +38,10 @@ st.markdown("""
         margin: 10px;
         cursor: pointer;
         border-radius: 12px;
-        width: 150px; /* Fixed width for all buttons */
-        height: 60px; /* Fixed height for all buttons */
+        width: 180px; /* Fixed width for all buttons */
+        height: 80px; /* Fixed height for all buttons */
+        white-space: normal; /* Allow text to wrap inside the button */
+        word-wrap: break-word; /* Break long words if necessary */
     }
 
     /* Center the buttons */
@@ -64,40 +66,52 @@ st.title("🌿 Working with Vector Databases and Performing Semantic Searches")
 if 'page' not in st.session_state:
     st.session_state.page = "home"
 
+# Initialize the current index name in session state
+if 'current_index_name' not in st.session_state:
+    st.session_state.current_index_name = None
+
+# Function to delete index
+def delete_index():
+    if st.session_state.current_index_name is not None:
+        try:
+            # Delete the index using the stored index name
+            if st.session_state.current_index_name in st.session_state.pc.list_indexes():
+                st.session_state.pc.delete_index(st.session_state.current_index_name)
+                st.write(f"Index '{st.session_state.current_index_name}' deleted successfully.")
+            st.session_state.current_index_name = None  # Reset the index name
+        except PineconeException as e:
+            st.error(f"Error deleting index: {str(e)}")
+
 # Function to switch page
 def switch_page(page_name):
+    delete_index()  # Delete current index before switching the page
     st.session_state.page = page_name
 
-# Home Page
-if st.session_state.page == "home":
-    # Center-align the instruction text
-    st.markdown('<div class="centered-text">Choose the type of search you\'d like to perform:</div>', unsafe_allow_html=True)
+# ---- Display the persistent buttons ---- #
+st.markdown('<div class="centered-text">Choose the type of search you\'d like to perform:</div>', unsafe_allow_html=True)
 
-    # Creating columns for buttons
-    col1, col2, col3, col4 = st.columns(4)
+# Creating columns for buttons to persist throughout
+col1, col2, col3, col4 = st.columns(4)
 
-    with col1:
-        if st.button("🖼️ Image Search"):
-            switch_page("image")
-    with col2:
-        if st.button("✍️ Text Search"):
-            switch_page("text")
-    with col3:
-        if st.button("🎥 Video Search"):
-            switch_page("video")
-    with col4:
-        if st.button("🎵 Audio Search"):
-            switch_page("audio")
+with col1:
+    if st.button("🖼️ Image Search"):
+        switch_page("image")
+with col2:
+    if st.button("✍️ Text Search"):
+        switch_page("text")
+with col3:
+    if st.button("🎥 Video Search"):
+        switch_page("video")
+with col4:
+    if st.button("🎵 Audio Search"):
+        switch_page("audio")
 
 
-# ------------------- Image Search Functionality -------------------
+# ---- Page-specific content below the buttons ---- #
 if st.session_state.page == "image":
-    st.title("🖼️ Image Search with CLIP and Pinecone")
-
-    # Add a "Home" button
-    if st.button("🏠 Home"):
-        switch_page("home")
-        st.stop()
+    
+    # Set the current index name for image search
+    st.session_state.current_index_name = "image-search-index"
 
     # Sidebar for Pinecone options and Models used
     st.sidebar.title("⚙️ Options")
@@ -110,7 +124,7 @@ if st.session_state.page == "image":
     elif selected_pinecone_option == "Environment":
         st.sidebar.write("Environment: us-east-1")
     elif selected_pinecone_option == "Index Name":
-        st.sidebar.write("Index Name: interactive-clip-index")
+        st.sidebar.write(f"Index Name: {st.session_state.current_index_name}")
 
     model_options = ["CLIP ViT-B/32", "Sentence-BERT"]
     selected_model_option = st.sidebar.selectbox("Models Used", model_options, key="model_image")
@@ -134,7 +148,7 @@ if st.session_state.page == "image":
             st.stop()
 
     # Interactive step: Button to create Pinecone index
-    index_name = "interactive-clip-index"
+    index_name = st.session_state.current_index_name
     if st.button("🛠️ Create Index"):
         if 'index_created' not in st.session_state:
             try:
@@ -265,14 +279,16 @@ if st.session_state.page == "image":
                 if not results_found:
                     st.write("No results found above the similarity threshold.")
 
+
 # ------------------- Text Search Functionality -------------------
 if st.session_state.page == "text":
-    st.title("✍️ Text Search with Sentence-BERT and Pinecone")
+    
+
+    # Set the current index name for text search
+    st.session_state.current_index_name = "text-search-index"
 
     # Add a "Home" button
-    if st.button("🏠 Home"):
-        switch_page("home")
-        st.stop()
+    
 
     # Pinecone Sidebar Options
     st.sidebar.title("⚙️ Options")
@@ -284,7 +300,7 @@ if st.session_state.page == "text":
     elif selected_pinecone_option == "Environment":
         st.sidebar.write("Environment: us-east-1")
     elif selected_pinecone_option == "Index Name":
-        st.sidebar.write("Index Name: sentence-transformers-pdf-index")
+        st.sidebar.write(f"Index Name: {st.session_state.current_index_name}")
 
     # Step 1: Initialize Pinecone client for text
     if 'pinecone_initialized_text' not in st.session_state:
@@ -300,7 +316,7 @@ if st.session_state.page == "text":
             st.stop()
 
     # Button to create the index for text search
-    index_name = "sentence-transformers-pdf-index"
+    index_name = st.session_state.current_index_name
     if st.button("🛠️ Create Text Index"):
         if 'index_created_text' not in st.session_state:
             try:
@@ -388,17 +404,30 @@ if st.session_state.page == "text":
                     st.write("No results found above the similarity threshold.")
 
 
-#----------------------------Audio Search--------------------------
+# ------------------- Audio Search Functionality -------------------
+def get_pinecone_client():
+    if 'pinecone_initialized' not in st.session_state:
+        try:
+            pc = Pinecone(api_key="6d539478-7754-4b85-9a20-38960d5cc24a", environment='us-east-1')
+            st.session_state.pc = pc
+            st.session_state.pinecone_initialized = True
+        except Exception as e:
+            st.error(f"Error initializing Pinecone: {str(e)}")
+            return None
+    return st.session_state.pc
+
+# Add custom CSS for button styling
+
+
+# Skip the title and "Home" button and go straight to functionality
+if 'page' not in st.session_state:
+    st.session_state.page = 'audio'
 
 if st.session_state.page == "audio":
-    
 
-    nltk.download('stopwords')
-    stop_words = set(stopwords.words('english'))
-    st.sidebar.title("⚙️ Options")
-
+    # Sidebar options for Pinecone settings and model
     pinecone_options = ["API Key", "Environment", "Index Name"]
-    selected_pinecone_option = st.sidebar.selectbox("Pinecone Settings", pinecone_options, key="pinecone_audio")
+    selected_pinecone_option = st.sidebar.selectbox("Pinecone Settings", pinecone_options)
 
     if selected_pinecone_option == "API Key":
         st.sidebar.write("Current API Key: 6d539478-7754-4b85-9a20-38960d5cc24a")
@@ -408,56 +437,51 @@ if st.session_state.page == "audio":
         st.sidebar.write("Index Name: audio-search-index")
 
     model_options = ["CLAP"]
-    selected_model_option = st.sidebar.selectbox("Models Used", model_options, key="model_audio")
+    selected_model_option = st.sidebar.selectbox("Models Used", model_options)
 
     if selected_model_option == "CLAP":
         st.sidebar.write("Model: CLAP by LAION")
 
     # Step 1: Initialize Pinecone client
-    if 'pinecone_initialized' not in st.session_state:
-        try:
-            pc = Pinecone(api_key="6d539478-7754-4b85-9a20-38960d5cc24a", environment='us-east-1')
-            st.session_state.pc = pc
-            st.session_state.pinecone_initialized = True
-        except Exception as e:
-            st.error(f"Error initializing Pinecone: {str(e)}")
-            st.stop()
+    pc = get_pinecone_client()
+    if pc is None:
+        st.stop()
 
-    # Set the index name
+    # Step 2: Interactive step to create Pinecone index
     index_name = "audio-search-index"
 
-    # Track session start time
-    if 'session_start_time' not in st.session_state:
-        st.session_state.session_start_time = datetime.now()
-
-    # Function to create index
-    def create_index():
-        if 'index_created' not in st.session_state:
+    if st.button("🛠️ Create a Vector Index"):
+        if 'index_created' not in st.session_state or not st.session_state.index_created:
             try:
-                existing_indexes = st.session_state.pc.list_indexes()
-
-                if index_name in existing_indexes:
-                    st.write(f"Index '{index_name}' already exists.")
-                else:
-                    st.write(f"Creating index '{index_name}'...")
-                    st.session_state.pc.create_index(
-                        name=index_name,
-                        dimension=512,  # CLAP audio/text outputs 512-dimensional embeddings
-                        metric="cosine",
-                        spec=ServerlessSpec(cloud='aws', region='us-east-1')
-                    )
-                st.session_state.index_created = True
-                st.success(f"Index '{index_name}' created successfully.")
+                # Directly create the index without worrying about existing indexes
+                st.write(f"Creating a new index '{index_name}'...")
+                pc.create_index(
+                    name=index_name,
+                    dimension=512,  # CLIP audio/text outputs 512-dimensional embeddings
+                    metric="cosine",
+                    spec=ServerlessSpec(cloud='aws', region='us-east-1')
+                )
+                st.session_state.index_created = True  # Set session state flag
+                st.write(f"Index '{index_name}' created successfully.")
             except Exception as e:
-                st.error(f"Error creating index: {str(e)}")
+                st.error(f"Error creating the index: {str(e)}")
+                st.stop()
+        else:
+            st.write(f"Index '{index_name}' is already created.")
 
-    # Create index button
-    if st.button("🛠️ Create A Vector Index"):
-        create_index()
+    if 'index' not in st.session_state and 'index_created' in st.session_state and st.session_state.index_created:
+        st.session_state.index = pc.Index(index_name)
+
+
+    
 
     # Ensure the index object is stored in session state after creation
     if 'index' not in st.session_state and 'index_created' in st.session_state:
-        st.session_state.index = st.session_state.pc.Index(index_name)
+        try:
+            st.session_state.index = st.session_state.pc.Index(index_name)
+            st.write(f"Index '{index_name}' loaded successfully.")
+        except Exception as e:
+            st.error(f"Error loading index: {str(e)}")
 
     # **New**: File uploader for Parquet file
     parquet_file = st.file_uploader("Upload the Parquet file containing audio data", type=["parquet"], key="parquet_audio")
@@ -588,7 +612,7 @@ if st.session_state.page == "audio":
             if st.button("🔍 Preview Data"):
                 display_first_5_audios(df)
 
-            if st.button("Create and Store Audio Embeddings"):
+            if st.button("Preprocessing and Vectorization"):
                 for idx, row in df.iterrows():
                     audio_id = row['line_id']
                     audio_bytes = row['audio']['bytes']
@@ -609,6 +633,20 @@ if st.session_state.page == "audio":
     if query_text and st.button("Search Similar Audio"):
         search_similar_audios(query_text, df)
 
+    # Delete button for the audio index
+    if st.button("❌ Delete Audio Index"):
+        try:
+            st.write(f"Attempting to delete index '{index_name}'...")
+            st.session_state.pc.delete_index(index_name)
+            st.write(f"Index '{index_name}' deleted successfully.")
+
+            # Reset session state flags
+            st.session_state.index_created = False
+            if 'index' in st.session_state:
+                del st.session_state.index
+            st.success(f"All session state related to '{index_name}' has been cleared.")
+        except Exception as e:
+            st.error(f"Error deleting index: {str(e)}")
 
 
 
@@ -626,11 +664,16 @@ def get_pinecone_client():
             return None
     return st.session_state.pc
 
+# Add custom CSS for button styling
+
+
 # Skip the title and "Home" button and go straight to functionality
+if 'page' not in st.session_state:
+    st.session_state.page = 'video'
+
 if st.session_state.page == "video":
 
-    # Remove the title and "Home" button, going straight to index creation
-
+    # Sidebar options for Pinecone settings and model
     pinecone_options = ["API Key", "Environment", "Index Name"]
     selected_pinecone_option = st.sidebar.selectbox("Pinecone Settings", pinecone_options)
 
@@ -654,27 +697,22 @@ if st.session_state.page == "video":
 
     # Step 2: Interactive step to create Pinecone index
     index_name = "video-search-index"
-    
+
     if st.button("🛠️ Create a Vector Index"):
         if 'index_created' not in st.session_state or not st.session_state.index_created:
             try:
-                existing_indexes = pc.list_indexes()
-                st.write(f"Existing indexes: {existing_indexes}")  # Debugging info
-
-                if index_name in existing_indexes:
-                    st.write(f"Index '{index_name}' already exists. Connecting to the existing index...")
-                else:
-                    st.write(f"Creating a new index '{index_name}'...")
-                    pc.create_index(
-                        name=index_name,
-                        dimension=512,  # CLIP audio/text outputs 512-dimensional embeddings
-                        metric="cosine",
-                        spec=ServerlessSpec(cloud='aws', region='us-east-1')
-                    )
-                    st.session_state.index_created = True
-                    st.write(f"Index '{index_name}' created successfully.")
+                # Directly create the index without worrying about existing indexes
+                st.write(f"Creating a new index '{index_name}'...")
+                pc.create_index(
+                    name=index_name,
+                    dimension=512,  # CLIP audio/text outputs 512-dimensional embeddings
+                    metric="cosine",
+                    spec=ServerlessSpec(cloud='aws', region='us-east-1')
+                )
+                st.session_state.index_created = True  # Set session state flag
+                st.write(f"Index '{index_name}' created successfully.")
             except Exception as e:
-                st.error(f"Error creating or connecting to the index: {str(e)}")
+                st.error(f"Error creating the index: {str(e)}")
                 st.stop()
         else:
             st.write(f"Index '{index_name}' is already created.")
@@ -685,6 +723,7 @@ if st.session_state.page == "video":
     video_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
     clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")    
 
+    # Function to extract frames from video by interval
     def get_single_frame_from_video(video_capture, time_sec):
         video_capture.set(cv2.CAP_PROP_POS_MSEC, time_sec * 1000)
         success, frame = video_capture.read()
@@ -692,7 +731,6 @@ if st.session_state.page == "video":
             return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         return None
 
-    # Function to divide video into intervals and extract frames
     def get_frames_from_video_by_interval(video_path, interval_sec=10):
         frames = []
         video_capture = cv2.VideoCapture(video_path)
@@ -708,18 +746,16 @@ if st.session_state.page == "video":
         video_capture.release()
         return frames
 
-    # Function to create image embeddings using CLIP
+    # Function to create image embedding using CLIP
     def get_image_embedding(image):
         inputs = clip_processor(images=image, return_tensors="pt")
         image_embeddings = video_model.get_image_features(**inputs)
-        
         return list(map(float, image_embeddings[0].detach().numpy().astype(np.float32)))
 
     # Function to create text embedding using CLIP
     def get_text_embedding(text):
         inputs = clip_processor(text=[text], return_tensors="pt")
         text_embedding = video_model.get_text_features(**inputs)
-        
         return list(map(float, text_embedding[0].detach().numpy().astype(np.float32)))
 
     # Main process to extract frames, create embeddings, and store in Pinecone
@@ -760,25 +796,21 @@ if st.session_state.page == "video":
         else:
             return None, None  # No matching results found
 
-    # Use moviepy to extract and save a video segment
+    # Function to extract and play video segment using moviepy
     def play_video_segment(video_path, frame_id, interval_sec=10, segment_duration=5):
         if frame_id is None:
             st.error("No frame ID provided. Cannot play video.")
             return None
 
-        # Calculate the time (in seconds) of the matching frame
         frame_time_sec = int(frame_id) * interval_sec
         start_time_sec = max(frame_time_sec - segment_duration // 2, 0)
         end_time_sec = start_time_sec + segment_duration
 
-        # Create a temporary file to save the video segment
         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video_file:
             temp_video_path = temp_video_file.name
 
-        # Use moviepy's ffmpeg_extract_subclip to extract the segment
         ffmpeg_extract_subclip(video_path, start_time_sec, end_time_sec, targetname=temp_video_path)
 
-        # Check if the video segment has been created
         if os.path.exists(temp_video_path):
             return temp_video_path
         else:
@@ -788,32 +820,43 @@ if st.session_state.page == "video":
     uploaded_video = st.file_uploader("Upload a video file", type=["mp4", "avi", "mov", "mkv"])
 
     if uploaded_video is not None:
-        # Save the uploaded video to a temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video_file:
             temp_video_file.write(uploaded_video.read())
             temp_video_path = temp_video_file.name
 
-        # Display the uploaded video
         st.video(temp_video_path)
 
-        # Button to process the video and create embeddings
-        if st.button("Process Video and Create Embeddings"):
+        # Create the custom HTML button for Preprocessing and Vectorization
+        
+
+        # Capture the button click event
+        if st.button("Preprocessing and Vectorization", key="process_button"):
             process_video_for_embedding(temp_video_path)
 
-        # Input field for query and button to search for similar video frames
-        query_text = st.text_input("Enter a query to search for similar video frames:")
+        query_text = st.text_input("Enter a semantic search string:")
 
-        if query_text and st.button("Search for Similar Video Frames"):
-            # Perform search and retrieve closest matching frame
+        if query_text and st.button("Search for Videos "):
             frame_id, score = search_video_by_text(query_text)
 
             if frame_id is not None:
                 st.write(f"Closest frame ID: {frame_id} with similarity score: {score}")
-
-                # Play the matching video segment
                 segment_video_path = play_video_segment(temp_video_path, frame_id)
 
                 if segment_video_path:
                     st.video(segment_video_path)
                 else:
                     st.error("No matching video segment found for the query.")
+
+    # Directly attempt to delete the index
+    if st.button("❌ Delete Index"):
+        try:
+            st.write(f"Attempting to delete index '{index_name}'...")
+            st.session_state.pc.delete_index(index_name)
+            st.write(f"Index '{index_name}' deleted successfully.")
+
+            # Reset session state flags
+            st.session_state.index_created = False
+            if 'index' in st.session_state:
+                del st.session_state.index
+        except Exception as e:
+            st.error(f"Error deleting index: {str(e)}")
