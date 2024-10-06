@@ -51,7 +51,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Streamlit title and description
-st.title("🌿 Multi-Modal Search")
+st.title("🌿 Working with Vector Databases and Performing Semantic Searches")
 
 # Initialize session state to keep track of which page is active
 if 'page' not in st.session_state:
@@ -62,8 +62,16 @@ def switch_page(page_name):
     st.session_state.page = page_name
 
 # Home Page
-if st.session_state.page == "home":
-    st.write("Choose the type of search you'd like to perform:")
+st.markdown("""
+    <style>
+    .centered-text {
+        text-align: center;
+        font-size: 24px;
+        font-weight: bold;
+    }
+    </style>
+    <div class="centered-text">Choose the type of search you'd like to perform:</div>
+""", unsafe_allow_html=True)
 
     col1, col2, col3, col4 = st.columns(4)
 
