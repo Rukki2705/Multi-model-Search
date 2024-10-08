@@ -499,10 +499,7 @@ if st.session_state.page == "text":
 
 
 # ------------------- Audio Search Functionality -------------------
-nltk.download('stopwords')
 
-# Define the stop words
-stop_words = set(stopwords.words('english'))
 def get_pinecone_client():
     if 'pinecone_initialized' not in st.session_state:
         try:
@@ -514,7 +511,10 @@ def get_pinecone_client():
             return None
     return st.session_state.pc
 
-# Add custom CSS for button styling
+nltk.download('stopwords')
+
+# Define the stop words
+stop_words = set(stopwords.words('english'))
 
 
 # Skip the title and "Home" button and go straight to functionality
