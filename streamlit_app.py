@@ -468,12 +468,12 @@ if st.session_state.page == "text":
                 if query_results['matches']:
                     for result in query_results['matches']:
                         if result['score'] >= similarity_threshold:
-                            results_found = True
                             page_content = result['metadata']['page_content'].replace("\n", " ")
                             page_number = result['id'].split('_')[-1]
 
                             query_position = page_content.lower().find(text_query.lower())
                             if query_position != -1:
+                                results_found = True
                                 start = max(query_position - context_characters, 0)
                                 end = min(query_position + len(text_query) + context_characters, len(page_content))
                                 displayed_content = page_content[start:end]
@@ -485,10 +485,10 @@ if st.session_state.page == "text":
                                 st.write(f"### Page {int(page_number) + 1}")
                                 st.write(f"Matched Page Content:\n{'-' * 40}\n{highlighted_content}\n{'-' * 40}")
                                 st.write(f"Score: {result['score']}\n")
-                        else:
-                            st.write(f"### Page {int(page_number) + 1}")
-                            st.write("Query not found in page content.")
-                            st.write(f"Score: {result['score']}\n")
+                            else:
+                                st.write(f"### Page {int(page_number) + 1}")
+                                st.write("Query not found in page content.")
+                                st.write(f"Score: {result['score']}\n")
 
                     if not results_found:
                         st.write("No results found above the similarity threshold.")
@@ -496,7 +496,6 @@ if st.session_state.page == "text":
                     st.write("No results found.")
         else:
             st.write("Index is not initialized. Please create an index first.")
-
 
 
 # ------------------- Audio Search Functionality -------------------
