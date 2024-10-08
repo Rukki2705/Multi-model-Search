@@ -1,4 +1,4 @@
-# 🎈 Blank app template
+# 🎈 Multi-Model Search 
 
 A simple Streamlit app template for you to modify!
 
