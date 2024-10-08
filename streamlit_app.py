@@ -499,6 +499,10 @@ if st.session_state.page == "text":
 
 
 # ------------------- Audio Search Functionality -------------------
+nltk.download('stopwords')
+
+# Define the stop words
+stop_words = set(stopwords.words('english'))
 def get_pinecone_client():
     if 'pinecone_initialized' not in st.session_state:
         try:
