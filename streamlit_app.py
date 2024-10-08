@@ -109,7 +109,6 @@ with col4:
 
 # ---- Page-specific content below the buttons ---- #
 if st.session_state.page == "image":
-   
 
     # Sidebar for Pinecone options and Models used
     st.sidebar.title("⚙️ Options")
@@ -136,8 +135,8 @@ if st.session_state.page == "image":
     if 'pinecone_initialized' not in st.session_state:
         try:
             pc = Pinecone(
-                api_key='bbc775b8-dc2a-4136-b80f-d1bac425405b',  # Use your Pinecone API key
-                environment='us-east-1'  # Replace with your Pinecone environment
+                api_key='bbc775b8-dc2a-4136-b80f-d1bac425405b',
+                environment='us-east-1'
             )
             st.session_state.pc = pc
             st.session_state.pinecone_initialized = True
@@ -147,15 +146,15 @@ if st.session_state.page == "image":
 
     index_name = "interactive-clip-index"
 
-    # Create Pinecone index
+    # Create Pinecone index if not already created
     if st.button("🛠️ Create a Vector Index"):
-        if 'index_created' not in st.session_state:
+        if 'index_created' not in st.session_state or not st.session_state.index_created:
             try:
                 existing_indexes = st.session_state.pc.list_indexes()
                 if index_name not in existing_indexes:
                     st.session_state.pc.create_index(
                         name=index_name,
-                        dimension=512,  # CLIP's ViT-B/32 outputs 512-dimensional embeddings
+                        dimension=512,
                         metric="cosine",
                         spec=ServerlessSpec(
                             cloud='aws',
@@ -170,7 +169,7 @@ if st.session_state.page == "image":
                 st.stop()
         else:
             st.write(f"Index '{index_name}' is already created.")
-    
+
     # Delete button for the image index
     if st.button("❌ Delete Image Index"):
         try:
@@ -240,9 +239,9 @@ if st.session_state.page == "image":
         else:
             st.write("No files uploaded yet.")
 
-    # Step 5: Store embeddings into Pinecone
+    # Step 5: Store embeddings into Pinecone only if the index exists
     if st.button("💾 Store Embeddings"):
-        if 'image_embeddings' in st.session_state:
+        if 'image_embeddings' in st.session_state and 'index' in st.session_state:
             index = st.session_state.index
             for image_data in st.session_state.image_embeddings:
                 index.upsert(
@@ -256,50 +255,55 @@ if st.session_state.page == "image":
                 )
             st.write("Embeddings stored in Pinecone successfully.")
         else:
-            st.write("No embeddings to store. Please convert the images to embeddings first.")
+            st.write("No embeddings to store or index not available. Please convert the images to embeddings first.")
 
-    # Step 6: Semantic Text Search
+    # Step 6: Semantic Text Search only if the index exists
     text_query = st.text_input("Enter your text query:", key="text_query_image")
     similarity_threshold = 0.20
 
     if st.button("🔎 Search"):
-        if text_query:
-            # Ensure model is loaded for text query
-            if 'model' not in st.session_state:
-                model, preprocess = clip.load("ViT-B/32", device=device)
-                st.session_state.model = model
-                st.session_state.preprocess = preprocess
-            else:
-                model = st.session_state.model
+        if 'index' in st.session_state:
+            index = st.session_state.index
+            if text_query:
+                # Ensure model is loaded for text query
+                if 'model' not in st.session_state:
+                    model, preprocess = clip.load("ViT-B/32", device=device)
+                    st.session_state.model = model
+                    st.session_state.preprocess = preprocess
+                else:
+                    model = st.session_state.model
 
-            # Tokenize and generate the text embedding
-            text_tokenized = clip.tokenize([text_query]).to(device)
-            with torch.no_grad():
-                text_embedding = model.encode_text(text_tokenized).cpu().numpy().flatten()
+                # Tokenize and generate the text embedding
+                text_tokenized = clip.tokenize([text_query]).to(device)
+                with torch.no_grad():
+                    text_embedding = model.encode_text(text_tokenized).cpu().numpy().flatten()
 
-            # Query Pinecone index
-            query_results = st.session_state.index.query(
-                vector=text_embedding.tolist(),
-                top_k=2,
-                include_metadata=True
-            )
+                # Query Pinecone index
+                query_results = index.query(
+                    vector=text_embedding.tolist(),
+                    top_k=2,
+                    include_metadata=True
+                )
 
-            # Display results based on similarity threshold
-            results_found = False
-            if query_results['matches']:
-                for result in query_results['matches']:
-                    if result['score'] >= similarity_threshold:
-                        results_found = True
-                        top_result_filename = result['metadata']['filename']
-                        top_result_image_path = os.path.join("images", top_result_filename)
-                        top_result_image = Image.open(top_result_image_path)
+                # Display results based on similarity threshold
+                results_found = False
+                if query_results['matches']:
+                    for result in query_results['matches']:
+                        if result['score'] >= similarity_threshold:
+                            results_found = True
+                            top_result_filename = result['metadata']['filename']
+                            top_result_image_path = os.path.join("images", top_result_filename)
+                            top_result_image = Image.open(top_result_image_path)
 
-                        st.image(top_result_image, caption=f"Filename: {top_result_filename} - Score: {result['score']}", use_column_width=True)
+                            st.image(top_result_image, caption=f"Filename: {top_result_filename} - Score: {result['score']}", use_column_width=True)
 
-                if not results_found:
-                    st.write("No results found above the similarity threshold.")
-            else:
-                st.write("No results found.")
+                    if not results_found:
+                        st.write("No results found above the similarity threshold.")
+                else:
+                    st.write("No results found.")
+        else:
+            st.write("Index is not initialized. Please create an index first.")
+
 
 
 # ------------------- Text Search Functionality -------------------
