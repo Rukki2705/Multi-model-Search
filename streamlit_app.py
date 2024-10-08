@@ -21,7 +21,10 @@ from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 import cv2
 import tempfile
 from datetime import datetime, timedelta
+nltk.download('stopwords')
 
+# Define the stop words
+stop_words = set(stopwords.words('english'))
 # Custom CSS to style the app
 st.markdown("""
     <style>
@@ -511,10 +514,7 @@ def get_pinecone_client():
             return None
     return st.session_state.pc
 
-nltk.download('stopwords')
 
-# Define the stop words
-stop_words = set(stopwords.words('english'))
 
 
 # Skip the title and "Home" button and go straight to functionality
