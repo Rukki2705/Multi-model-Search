@@ -308,7 +308,6 @@ if st.session_state.page == "image":
 
 # ------------------- Text Search Functionality -------------------
 if st.session_state.page == "text":
-    
 
     # Pinecone Sidebar Options
     st.sidebar.title("⚙️ Text Search Options")
@@ -345,13 +344,10 @@ if st.session_state.page == "text":
     # Button to create the index for text search
     index_name = "sentence-transformers-pdf-index"
     if st.button("🛠️ Create a Vector Index"):
-        if 'index_created_text' not in st.session_state:
+        if 'index_created_text' not in st.session_state or not st.session_state.index_created_text:
             try:
                 existing_indexes = st.session_state.pc_text.list_indexes()
-
-                if index_name in existing_indexes:
-                    st.write(f"Index '{index_name}' already exists. Connecting to the existing index...")
-                else:
+                if index_name not in existing_indexes:
                     st.write(f"Creating a new index '{index_name}'...")
                     st.session_state.pc_text.create_index(
                         name=index_name,
@@ -363,6 +359,8 @@ if st.session_state.page == "text":
                         )
                     )
                 st.session_state.index_created_text = True
+                st.session_state.index_text = st.session_state.pc_text.Index(index_name)
+                st.write(f"Index '{index_name}' created or connected successfully.")
             except PineconeException as e:
                 st.error(f"Error creating or connecting to the index: {str(e)}")
                 st.stop()
@@ -384,11 +382,14 @@ if st.session_state.page == "text":
         except Exception as e:
             st.error(f"Error deleting index: {str(e)}")
 
-
-
-    # Connect to the index
-    if 'index_text' not in st.session_state and 'index_created_text' in st.session_state:
-        st.session_state.index_text = st.session_state.pc_text.Index(index_name)
+    # Connect to the index if it exists
+    if 'index_created_text' in st.session_state and st.session_state.index_created_text:
+        if 'index_text' not in st.session_state:
+            try:
+                st.session_state.index_text = st.session_state.pc_text.Index(index_name)
+                st.write("Connected to the existing index.")
+            except PineconeException as e:
+                st.error(f"Error connecting to the index: {str(e)}")
 
     # Step 2: Upload the PDF file
     uploaded_pdf = st.file_uploader("📤 Choose a PDF file", type="pdf")
@@ -404,8 +405,8 @@ if st.session_state.page == "text":
         for i, page in enumerate(pages):
             if page:
                 st.write(f"### Page {i + 1}")
-                wrapped_page = textwrap.fill(page, width=100)  # Wrap lines to keep the text looking neat
-                st.write(wrapped_page)  # Display the wrapped text as it appears in the document
+                wrapped_page = textwrap.fill(page, width=100)
+                st.write(wrapped_page)
             else:
                 st.write(f"### Page {i + 1} is empty or could not be read.")
 
@@ -428,7 +429,7 @@ if st.session_state.page == "text":
 
     # Step 5: Store embeddings in Pinecone
     if st.button("💾 Store Embeddings"):
-        if 'text_embeddings' in st.session_state:
+        if 'text_embeddings' in st.session_state and 'index_text' in st.session_state:
             index = st.session_state.index_text
             for page_data in st.session_state.text_embeddings:
                 index.upsert(
@@ -442,64 +443,60 @@ if st.session_state.page == "text":
                 )
             st.write("Embeddings stored in Pinecone successfully.")
         else:
-            st.write("No embeddings to store. Please convert the PDF to embeddings first.")
+            st.write("No embeddings to store or index not available. Please convert the PDF to embeddings first.")
 
     # Step 6: Perform text-based search
     text_query = st.text_input("Enter your search query:")
 
     similarity_threshold = 0.20
-    context_characters = 200  # Define how many characters to show before and after the query
+    context_characters = 200
 
     if st.button("🔎 Search PDF"):
-        if text_query:
-            model = SentenceTransformer('all-MiniLM-L6-v2')
-            query_embedding = model.encode(text_query)
+        if 'index_text' in st.session_state:
+            index = st.session_state.index_text
+            if text_query:
+                model = SentenceTransformer('all-MiniLM-L6-v2')
+                query_embedding = model.encode(text_query)
 
-            query_results = st.session_state.index_text.query(
-                vector=query_embedding.tolist(),
-                top_k=2,  # Return top results
-                include_metadata=True
-            )
+                query_results = index.query(
+                    vector=query_embedding.tolist(),
+                    top_k=2,
+                    include_metadata=True
+                )
 
-            results_found = False
-            if query_results['matches']:
-                for result in query_results['matches']:
-                    if result['score'] >= similarity_threshold:
-                        results_found = True
-                        page_content = result['metadata']['page_content'].replace("\n", " ")
-                        page_number = result['id'].split('_')[-1]  # Extract the page number from the ID
+                results_found = False
+                if query_results['matches']:
+                    for result in query_results['matches']:
+                        if result['score'] >= similarity_threshold:
+                            results_found = True
+                            page_content = result['metadata']['page_content'].replace("\n", " ")
+                            page_number = result['id'].split('_')[-1]
 
-                        # Find the position of the search query in the page content
-                        query_position = page_content.lower().find(text_query.lower())
-
-                        if query_position != -1:
-                            # Get a portion of the text around the query for context
-                            start = max(query_position - context_characters, 0)
-                            end = min(query_position + len(text_query) + context_characters, len(page_content))
-
-                            # Highlight the query in the displayed result
-                            displayed_content = page_content[start:end]
-                            highlighted_content = displayed_content.replace(text_query, f"**{text_query}**")
-
-                            # Add ellipses ("...") to the beginning and end of the content
-                            if start > 0:
-                                highlighted_content = "..." + highlighted_content
-                            if end < len(page_content):
-                                highlighted_content = highlighted_content + "..."
-
-                            # Display the relevant portion of the page
-                            st.write(f"### Page {int(page_number) + 1}")  # Display the correct page number
-                            st.write(f"Matched Page Content:\n{'-' * 40}\n{highlighted_content}\n{'-' * 40}")
-                            st.write(f"Score: {result['score']}\n")
+                            query_position = page_content.lower().find(text_query.lower())
+                            if query_position != -1:
+                                start = max(query_position - context_characters, 0)
+                                end = min(query_position + len(text_query) + context_characters, len(page_content))
+                                displayed_content = page_content[start:end]
+                                highlighted_content = displayed_content.replace(text_query, f"**{text_query}**")
+                                if start > 0:
+                                    highlighted_content = "..." + highlighted_content
+                                if end < len(page_content):
+                                    highlighted_content += "..."
+                                st.write(f"### Page {int(page_number) + 1}")
+                                st.write(f"Matched Page Content:\n{'-' * 40}\n{highlighted_content}\n{'-' * 40}")
+                                st.write(f"Score: {result['score']}\n")
                         else:
                             st.write(f"### Page {int(page_number) + 1}")
                             st.write("Query not found in page content.")
                             st.write(f"Score: {result['score']}\n")
 
-                if not results_found:
-                    st.write("No results found above the similarity threshold.")
-            else:
-                st.write("No results found.")
+                    if not results_found:
+                        st.write("No results found above the similarity threshold.")
+                else:
+                    st.write("No results found.")
+        else:
+            st.write("Index is not initialized. Please create an index first.")
+
 
 
 # ------------------- Audio Search Functionality -------------------
