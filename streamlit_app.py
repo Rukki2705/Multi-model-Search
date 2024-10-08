@@ -109,25 +109,23 @@ with col4:
 
 # ---- Page-specific content below the buttons ---- #
 if st.session_state.page == "image":
-    
-    # Set the current index name for image search
-    st.session_state.current_index_name = "image-search-index"
+   
 
     # Sidebar for Pinecone options and Models used
     st.sidebar.title("⚙️ Options")
 
     pinecone_options = ["API Key", "Environment", "Index Name"]
-    selected_pinecone_option = st.sidebar.selectbox("Pinecone Settings", pinecone_options, key="pinecone_image")
+    selected_pinecone_option = st.sidebar.selectbox("Pinecone Settings", pinecone_options)
 
     if selected_pinecone_option == "API Key":
         st.sidebar.write("Current API Key: bbc775b8-dc2a-4136-b80f-d1bac425405b")
     elif selected_pinecone_option == "Environment":
         st.sidebar.write("Environment: us-east-1")
     elif selected_pinecone_option == "Index Name":
-        st.sidebar.write(f"Index Name: {st.session_state.current_index_name}")
+        st.sidebar.write("Index Name: interactive-clip-index")
 
     model_options = ["CLIP ViT-B/32", "Sentence-BERT"]
-    selected_model_option = st.sidebar.selectbox("Models Used", model_options, key="model_image")
+    selected_model_option = st.sidebar.selectbox("Models Used", model_options)
 
     if selected_model_option == "CLIP ViT-B/32":
         st.sidebar.write("Model: CLIP ViT-B/32 by OpenAI")
@@ -138,7 +136,7 @@ if st.session_state.page == "image":
     if 'pinecone_initialized' not in st.session_state:
         try:
             pc = Pinecone(
-                api_key='6d539478-7754-4b85-9a20-38960d5cc24a',  # Use your Pinecone API key
+                api_key='bbc775b8-dc2a-4136-b80f-d1bac425405b',  # Use your Pinecone API key
                 environment='us-east-1'  # Replace with your Pinecone environment
             )
             st.session_state.pc = pc
@@ -147,17 +145,14 @@ if st.session_state.page == "image":
             st.error(f"Error initializing Pinecone: {str(e)}")
             st.stop()
 
-    # Interactive step: Button to create Pinecone index
-    index_name = st.session_state.current_index_name
-    if st.button("🛠️ Create Index"):
+    index_name = "interactive-clip-index"
+
+    # Create Pinecone index
+    if st.button("🛠️ Create a Vector Index"):
         if 'index_created' not in st.session_state:
             try:
                 existing_indexes = st.session_state.pc.list_indexes()
-
-                if index_name in existing_indexes:
-                    st.write(f"Index '{index_name}' already exists. Connecting to the existing index...")
-                else:
-                    st.write(f"Creating a new index '{index_name}'...")
+                if index_name not in existing_indexes:
                     st.session_state.pc.create_index(
                         name=index_name,
                         dimension=512,  # CLIP's ViT-B/32 outputs 512-dimensional embeddings
@@ -168,26 +163,40 @@ if st.session_state.page == "image":
                         )
                     )
                 st.session_state.index_created = True
+                st.session_state.index = st.session_state.pc.Index(index_name)
+                st.write(f"Index '{index_name}' created or connected successfully.")
             except PineconeException as e:
                 st.error(f"Error creating or connecting to the index: {str(e)}")
                 st.stop()
         else:
             st.write(f"Index '{index_name}' is already created.")
+    
+    # Delete button for the image index
+    if st.button("❌ Delete Image Index"):
+        try:
+            st.write(f"Attempting to delete index '{index_name}'...")
+            st.session_state.pc.delete_index(index_name)
+            st.write(f"Index '{index_name}' deleted successfully.")
 
-    if 'index' not in st.session_state and 'index_created' in st.session_state:
-        st.session_state.index = st.session_state.pc.Index(index_name)
+            # Reset session state flags
+            st.session_state.index_created = False
+            if 'index' in st.session_state:
+                del st.session_state.index
+            st.success(f"All session state related to '{index_name}' has been cleared.")
+        except Exception as e:
+            st.error(f"Error deleting index: {str(e)}")
 
-    # Step 2: Select data type (currently only supporting images)
-    data_type = st.selectbox("📂 Select Data Type", ["Images"], key="data_type_image")
-
-    # Step 3: Upload files
+    # Step 2: Upload files and preprocess images
     uploaded_files = st.file_uploader("📤 Choose files", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
 
     if uploaded_files:
         st.write(f"{len(uploaded_files)} files uploaded successfully.")
 
-    # Step 4: Preview Data
-    if st.button("🔍 Preview Uploaded Files"):
+    # Initialize device
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    # Step 3: Preview Uploaded Images Button
+    if st.button("🔍 Preview Uploaded Images"):
         if uploaded_files:
             for uploaded_file in uploaded_files:
                 image = Image.open(uploaded_file)
@@ -195,12 +204,10 @@ if st.session_state.page == "image":
         else:
             st.write("No files uploaded yet.")
 
-    # Step 5: Convert to Embedding
+    # Step 4: Convert images to embeddings
     if st.button("🧠 Convert to Embedding"):
         if uploaded_files:
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-
-            # Load CLIP model and preprocessing
+            # Load CLIP model
             if 'model' not in st.session_state:
                 model, preprocess = clip.load("ViT-B/32", device=device)
                 st.session_state.model = model
@@ -217,11 +224,14 @@ if st.session_state.page == "image":
                 with open(image_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
+                # Preprocess the image
                 image = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
 
+                # Generate image embedding using CLIP
                 with torch.no_grad():
                     image_embedding = model.encode_image(image).cpu().numpy().flatten()
 
+                # Store the embeddings
                 if 'image_embeddings' not in st.session_state:
                     st.session_state.image_embeddings = []
                 st.session_state.image_embeddings.append({"filename": uploaded_file.name, "embedding": image_embedding})
@@ -230,7 +240,7 @@ if st.session_state.page == "image":
         else:
             st.write("No files uploaded yet.")
 
-    # Step 6: Store embeddings
+    # Step 5: Store embeddings into Pinecone
     if st.button("💾 Store Embeddings"):
         if 'image_embeddings' in st.session_state:
             index = st.session_state.index
@@ -248,23 +258,33 @@ if st.session_state.page == "image":
         else:
             st.write("No embeddings to store. Please convert the images to embeddings first.")
 
-    # Step 7: Semantic Text Search
+    # Step 6: Semantic Text Search
     text_query = st.text_input("Enter your text query:", key="text_query_image")
-
-    similarity_threshold = 0.25
+    similarity_threshold = 0.20
 
     if st.button("🔎 Search"):
         if text_query:
+            # Ensure model is loaded for text query
+            if 'model' not in st.session_state:
+                model, preprocess = clip.load("ViT-B/32", device=device)
+                st.session_state.model = model
+                st.session_state.preprocess = preprocess
+            else:
+                model = st.session_state.model
+
+            # Tokenize and generate the text embedding
             text_tokenized = clip.tokenize([text_query]).to(device)
             with torch.no_grad():
                 text_embedding = model.encode_text(text_tokenized).cpu().numpy().flatten()
 
+            # Query Pinecone index
             query_results = st.session_state.index.query(
                 vector=text_embedding.tolist(),
-                top_k=2,  # Return top 2 results
+                top_k=2,
                 include_metadata=True
             )
 
+            # Display results based on similarity threshold
             results_found = False
             if query_results['matches']:
                 for result in query_results['matches']:
@@ -278,46 +298,49 @@ if st.session_state.page == "image":
 
                 if not results_found:
                     st.write("No results found above the similarity threshold.")
+            else:
+                st.write("No results found.")
 
 
 # ------------------- Text Search Functionality -------------------
 if st.session_state.page == "text":
     
 
-    # Set the current index name for text search
-    st.session_state.current_index_name = "text-search-index"
-
-    # Add a "Home" button
-    
-
     # Pinecone Sidebar Options
-    st.sidebar.title("⚙️ Options")
+    st.sidebar.title("⚙️ Text Search Options")
     pinecone_options = ["API Key", "Environment", "Index Name"]
-    selected_pinecone_option = st.sidebar.selectbox("Pinecone Settings", pinecone_options, key="pinecone_text")
+    selected_pinecone_option = st.sidebar.selectbox("Pinecone Settings", pinecone_options)
 
     if selected_pinecone_option == "API Key":
         st.sidebar.write("Current API Key: bbc775b8-dc2a-4136-b80f-d1bac425405b")
     elif selected_pinecone_option == "Environment":
         st.sidebar.write("Environment: us-east-1")
     elif selected_pinecone_option == "Index Name":
-        st.sidebar.write(f"Index Name: {st.session_state.current_index_name}")
+        st.sidebar.write("Index Name: sentence-transformers-pdf-index")
+
+    # Model Dropdown in Sidebar for Text
+    model_options = ["CLIP ViT-B/32", "Sentence-BERT"]
+    selected_model_option = st.sidebar.selectbox("Models Used", model_options)
+
+    if selected_model_option == "Sentence-BERT":
+        st.sidebar.write("Model: Sentence-BERT for Text Search")
 
     # Step 1: Initialize Pinecone client for text
     if 'pinecone_initialized_text' not in st.session_state:
         try:
-            pc = Pinecone(
-                api_key='6d539478-7754-4b85-9a20-38960d5cc24a',
+            pc_text = Pinecone(
+                api_key='bbc775b8-dc2a-4136-b80f-d1bac425405b',
                 environment='us-east-1'
             )
-            st.session_state.pc_text = pc
+            st.session_state.pc_text = pc_text
             st.session_state.pinecone_initialized_text = True
         except PineconeException as e:
             st.error(f"Error initializing Pinecone: {str(e)}")
             st.stop()
 
     # Button to create the index for text search
-    index_name = st.session_state.current_index_name
-    if st.button("🛠️ Create Text Index"):
+    index_name = "sentence-transformers-pdf-index"
+    if st.button("🛠️ Create a Vector Index"):
         if 'index_created_text' not in st.session_state:
             try:
                 existing_indexes = st.session_state.pc_text.list_indexes()
@@ -342,42 +365,86 @@ if st.session_state.page == "text":
         else:
             st.write(f"Index '{index_name}' is already created.")
 
+    # Delete button for the text index
+    if st.button("❌ Delete Text Index"):
+        try:
+            st.write(f"Attempting to delete index '{index_name}'...")
+            st.session_state.pc_text.delete_index(index_name)
+            st.write(f"Index '{index_name}' deleted successfully.")
+
+            # Reset session state flags
+            st.session_state.index_created_text = False
+            if 'index_text' in st.session_state:
+                del st.session_state.index_text
+            st.success(f"All session state related to '{index_name}' has been cleared.")
+        except Exception as e:
+            st.error(f"Error deleting index: {str(e)}")
+
+
+
     # Connect to the index
     if 'index_text' not in st.session_state and 'index_created_text' in st.session_state:
         st.session_state.index_text = st.session_state.pc_text.Index(index_name)
 
     # Step 2: Upload the PDF file
-    uploaded_pdf = st.file_uploader("📤 Choose a PDF file", type="pdf", key="pdf_upload_text")
+    uploaded_pdf = st.file_uploader("📤 Choose a PDF file", type="pdf")
 
     if uploaded_pdf:
         st.write(f"File uploaded: {uploaded_pdf.name}")
 
-    # Step 3: Convert PDF to embeddings and store in Pinecone
+    # Step 3: Preview PDF content
+    if uploaded_pdf and st.button("🔍 Preview PDF"):
+        reader = PdfReader(uploaded_pdf)
+        pages = [page.extract_text() for page in reader.pages]
+
+        for i, page in enumerate(pages):
+            if page:
+                st.write(f"### Page {i + 1}")
+                wrapped_page = textwrap.fill(page, width=100)  # Wrap lines to keep the text looking neat
+                st.write(wrapped_page)  # Display the wrapped text as it appears in the document
+            else:
+                st.write(f"### Page {i + 1} is empty or could not be read.")
+
+    # Step 4: Convert PDF to embeddings
     if st.button("🧠 Convert PDF to Embedding"):
         if uploaded_pdf:
             reader = PdfReader(uploaded_pdf)
             pages = [page.extract_text() for page in reader.pages]
             model = SentenceTransformer('all-MiniLM-L6-v2')
 
+            # Store embeddings in session state before storing in Pinecone
+            st.session_state.text_embeddings = []
             for idx, page_text in enumerate(pages):
                 page_embedding = model.encode(page_text)
-                st.session_state.index_text.upsert(
-                    vectors=[
-                        {
-                            "id": f"page_{idx}",
-                            "values": page_embedding.tolist(),
-                            "metadata": {"page_content": page_text}
-                        }
-                    ]
-                )
-            st.write("PDF pages converted to embeddings and stored.")
+                st.session_state.text_embeddings.append({"page_id": f"page_{idx}", "embedding": page_embedding, "content": page_text})
+
+            st.write("PDF converted to embeddings successfully.")
         else:
             st.write("Please upload a PDF file first.")
 
-    # Step 4: Perform text-based search
-    text_query = st.text_input("Enter your search query:", key="text_query_pdf")
+    # Step 5: Store embeddings in Pinecone
+    if st.button("💾 Store Embeddings"):
+        if 'text_embeddings' in st.session_state:
+            index = st.session_state.index_text
+            for page_data in st.session_state.text_embeddings:
+                index.upsert(
+                    vectors=[
+                        {
+                            "id": page_data['page_id'],
+                            "values": page_data['embedding'].tolist(),
+                            "metadata": {"page_content": page_data['content']}
+                        }
+                    ]
+                )
+            st.write("Embeddings stored in Pinecone successfully.")
+        else:
+            st.write("No embeddings to store. Please convert the PDF to embeddings first.")
 
-    similarity_threshold = 0.25
+    # Step 6: Perform text-based search
+    text_query = st.text_input("Enter your search query:")
+
+    similarity_threshold = 0.20
+    context_characters = 200  # Define how many characters to show before and after the query
 
     if st.button("🔎 Search PDF"):
         if text_query:
@@ -386,7 +453,7 @@ if st.session_state.page == "text":
 
             query_results = st.session_state.index_text.query(
                 vector=query_embedding.tolist(),
-                top_k=3,  # Return top results
+                top_k=2,  # Return top results
                 include_metadata=True
             )
 
@@ -395,13 +462,40 @@ if st.session_state.page == "text":
                 for result in query_results['matches']:
                     if result['score'] >= similarity_threshold:
                         results_found = True
-                        formatted_content = result['metadata']['page_content'].replace("\n", " ")
-                        wrapped_content = textwrap.fill(formatted_content, width=80)
-                        st.write(f"Matched Page Content:\n{'-' * 40}\n{wrapped_content}\n{'-' * 40}")
-                        st.write(f"Score: {result['score']}\n")
+                        page_content = result['metadata']['page_content'].replace("\n", " ")
+                        page_number = result['id'].split('_')[-1]  # Extract the page number from the ID
+
+                        # Find the position of the search query in the page content
+                        query_position = page_content.lower().find(text_query.lower())
+
+                        if query_position != -1:
+                            # Get a portion of the text around the query for context
+                            start = max(query_position - context_characters, 0)
+                            end = min(query_position + len(text_query) + context_characters, len(page_content))
+
+                            # Highlight the query in the displayed result
+                            displayed_content = page_content[start:end]
+                            highlighted_content = displayed_content.replace(text_query, f"**{text_query}**")
+
+                            # Add ellipses ("...") to the beginning and end of the content
+                            if start > 0:
+                                highlighted_content = "..." + highlighted_content
+                            if end < len(page_content):
+                                highlighted_content = highlighted_content + "..."
+
+                            # Display the relevant portion of the page
+                            st.write(f"### Page {int(page_number) + 1}")  # Display the correct page number
+                            st.write(f"Matched Page Content:\n{'-' * 40}\n{highlighted_content}\n{'-' * 40}")
+                            st.write(f"Score: {result['score']}\n")
+                        else:
+                            st.write(f"### Page {int(page_number) + 1}")
+                            st.write("Query not found in page content.")
+                            st.write(f"Score: {result['score']}\n")
 
                 if not results_found:
                     st.write("No results found above the similarity threshold.")
+            else:
+                st.write("No results found.")
 
 
 # ------------------- Audio Search Functionality -------------------
