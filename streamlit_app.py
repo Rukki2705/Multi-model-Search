@@ -666,7 +666,7 @@ if st.session_state.page == "audio":
     df = None
     if parquet_file is not None:
         try:
-            df = pd.read_parquet(parquet_file)
+            df = pd.read_parquet(parquet_file).head(75)
             st.write("Dataset loaded successfully.")
 
             if st.button("🔍 Preview Data"):
