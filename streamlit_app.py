@@ -514,9 +514,6 @@ def get_pinecone_client():
             return None
     return st.session_state.pc
 
-# Add custom CSS for button styling
-
-
 # Skip the title and "Home" button and go straight to functionality
 if 'page' not in st.session_state:
     st.session_state.page = 'audio'
@@ -566,12 +563,6 @@ if st.session_state.page == "audio":
                 st.stop()
         else:
             st.write(f"Index '{index_name}' is already created.")
-
-    if 'index' not in st.session_state and 'index_created' in st.session_state and st.session_state.index_created:
-        st.session_state.index = pc.Index(index_name)
-
-
-    
 
     # Ensure the index object is stored in session state after creation
     if 'index' not in st.session_state and 'index_created' in st.session_state:
@@ -678,7 +669,6 @@ if st.session_state.page == "audio":
 
     def search_similar_audios(query_text, df, top_k=10):
         text_embedding = create_text_embeddings(query_text)
-
         index = st.session_state.pc.Index(index_name)  # Use st.session_state.pc to get Pinecone client
         search_results = index.query(vector=text_embedding, top_k=top_k)
 
@@ -705,6 +695,7 @@ if st.session_state.page == "audio":
     if parquet_file is not None:
         try:
             df = pd.read_parquet(parquet_file).head(75)
+            st.session_state.df = df  # Store the DataFrame in session state
             st.write("Dataset loaded successfully.")
 
             if st.button("🔍 Preview Data"):
@@ -726,10 +717,13 @@ if st.session_state.page == "audio":
         except Exception as e:
             st.error(f"Error loading file: {e}")
 
-    # Query input for searching similar audio
-    query_text = st.text_input("Enter a query to search similar audio:", key="query_audio")
-    if query_text and st.button("Search Similar Audio"):
-        search_similar_audios(query_text, df)
+    # Check if 'df' exists in session state before allowing search
+    if 'df' in st.session_state:
+        query_text = st.text_input("Enter a query to search similar audio:", key="query_audio")
+        if query_text and st.button("Search Similar Audio"):
+            search_similar_audios(query_text, st.session_state.df)
+    else:
+        st.write("Please upload and process a Parquet file before searching for similar audio.")
 
     # Delete button for the audio index
     if st.button("❌ Delete Audio Index"):
@@ -742,10 +736,9 @@ if st.session_state.page == "audio":
             st.session_state.index_created = False
             if 'index' in st.session_state:
                 del st.session_state.index
-            st.success(f"All session state related to '{index_name}' has been cleared.")
+            st.success(f"All session state related to '{index_name}' has been cleared.") 
         except Exception as e:
             st.error(f"Error deleting index: {str(e)}")
-
 
 
 
